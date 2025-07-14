@@ -151,14 +151,14 @@ files = [
 
 [[package]]
 name = "async-selective-queue"
-version = "0.1.1"
+version = "0.1.1.post0"
 description = "Async queue with selective retrieval"
 optional = false
 python-versions = "<4.0,>=3.9"
 groups = ["main"]
 files = [
-    {file = "async_selective_queue-0.1.1-py3-none-any.whl", hash = "sha256:b06af83a09d0fbfc1ac115f68e7e6b879823de71a1749e4a439f44903ae9cfb7"},
-    {file = "async_selective_queue-0.1.1.tar.gz", hash = "sha256:f59e78ef1703a8781ecd1fff103f4692b3fb8885419430b7c735ee45e5909632"},
+    {file = "async_selective_queue-0.1.1.post0-py3-none-any.whl", hash = "sha256:5478101066603d8e1959b08329e853b9b1cc0612debc101f0f87d1379154d7a9"},
+    {file = "async_selective_queue-0.1.1.post0.tar.gz", hash = "sha256:b3b0a564b07a0d0a32a097b392f520a4bd106f18bc3ee12e78daecc800613d23"},
 ]
 
 [[package]]
