@@ -4,9 +4,9 @@ Create a minimal reproducible example of behaviour in ACA-Py. Easily spin-up two
 
 ## Quick Start
 
-If you'd like to create a minimal reproducible example, simply fork this repo, and copy an existing one in the `examples` directory or the template found in `template`.
+If you'd like to create a minimal reproducible example, simply fork this repo, and copy an existing one in the `examples` directory or the template found in `examples/template`.
 
-Each example is a script that describes a simple 
+Each example is a script that describes a simple interaction between two ACA-Py agents with the goal of testing a feature. It is recommended that examples be as minimal and as self-contained as possible.
 
 ## Goals for this Project
 

@@ -82,7 +82,7 @@ services:
   example:
     container_name: controller
     build:
-      context: ..
+      context: ../..
     environment:
       - ALICE=http://alice:3001
       - BOB=http://bob:3001
