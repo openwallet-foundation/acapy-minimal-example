@@ -5,7 +5,7 @@ on:
 
 jobs:
   deploy:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     permissions:
       id-token: write
 
@@ -22,9 +22,9 @@ jobs:
         run: poetry install
       - name: Run tests
         run: |
-          docker-compose run tests
+          docker compose run tests
       - name: Build package
         run: |
           poetry build
       - name: Publish package
-        uses: pypa/gh-action-pypi-publish@v1.10.0
+        uses: pypa/gh-action-pypi-publish@v1.12.4

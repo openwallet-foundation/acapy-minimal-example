@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "acapy-controller"
-version = "0.2.0"
+version = "0.3.0"
 description = "ACA-Py Controller"
 authors = ["Daniel Bluhm <dbluhm@pm.me>"]
 license = "Apache-2.0"
@@ -18,11 +18,10 @@ blessings = "^1.7"
 models = ["pydantic"]
 
 [tool.poetry.dev-dependencies]
-black = "^24.4.2"
-ruff = "^0.6.5"
-pre-commit = "^3.7.0"
-pytest = "^8.2.1"
-pytest-asyncio = "^0.24.0"
+ruff = "^0.12.0"
+pre-commit = "^4.2.0"
+pytest = "^8.4.1"
+pytest-asyncio = "^1.0.0"
 
 [tool.pytest.ini_options]
 markers = "examples: test the examples"

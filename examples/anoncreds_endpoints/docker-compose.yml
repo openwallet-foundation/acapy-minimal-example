@@ -8,7 +8,7 @@ services:
     #   args:
     #     acapy_url: https://github.com/Indicio-tech/aries-cloudagent-python@c1fed3c13d33e65979b08dd1eaf79dc84e3ce504
     ports:
-      - "3001:3001"
+      - "3003:3001"
     command: >
       start
         --label Alice
@@ -19,12 +19,13 @@ services:
         --admin-insecure-mode
         --tails-server-base-url http://tails:6543
         --genesis-url https://raw.githubusercontent.com/Indicio-tech/indicio-network/main/genesis_files/pool_transactions_testnet_genesis
-        --wallet-type askar
+        --wallet-type askar-anoncreds
         --wallet-name alice
         --wallet-key insecure
         --auto-provision
         --log-level debug
         --debug-webhooks
+        --notify-revocation
     healthcheck:
       test: curl -s -o /dev/null -w '%{http_code}' "http://localhost:3001/status/live" | grep "200" > /dev/null
       start_period: 30s
@@ -37,8 +38,6 @@ services:
 
   bob:
     image: ghcr.io/openwallet-foundation/acapy-agent:py3.12-1.2.4
-    #image: bcgovimages/aries-cloudagent:py36-1.16-1_0.7.5
-    #image: bcgovimages/aries-cloudagent:py36-1.16-1_1.0.0-rc0
     # image: acapy-test-image
     # build:
     #   context: .
@@ -46,7 +45,7 @@ services:
     #   args:
     #     acapy_url: https://github.com/Indicio-tech/aries-cloudagent-python@c1fed3c13d33e65979b08dd1eaf79dc84e3ce504
     ports:
-      - "3002:3001"
+      - "3004:3001"
     command: >
       start
         --label Bob
@@ -57,7 +56,7 @@ services:
         --admin-insecure-mode
         --tails-server-base-url http://tails:6543
         --genesis-url https://raw.githubusercontent.com/Indicio-tech/indicio-network/main/genesis_files/pool_transactions_testnet_genesis
-        --wallet-type askar
+        --wallet-type askar-anoncreds
         --wallet-name bob
         --wallet-key insecure
         --auto-provision
@@ -90,7 +89,7 @@ services:
   tails:
     image: ghcr.io/bcgov/tails-server:latest
     ports:
-      - 6543:6543
+      - 6544:6543
     environment:
       - GENESIS_URL=https://raw.githubusercontent.com/Indicio-tech/indicio-network/main/genesis_files/pool_transactions_testnet_genesis
     command: >

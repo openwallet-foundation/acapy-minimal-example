@@ -7,7 +7,7 @@ from secrets import randbelow, token_hex
 from typing import Any, Dict, List, Mapping, Optional, Tuple, Type, Union
 from uuid import uuid4
 
-from .controller import Controller, ControllerError, MinType, Minimal, params
+from .controller import Controller, ControllerError, MinType, Minimal, omit_none, params
 from .onboarding import get_onboarder
 
 
@@ -19,14 +19,14 @@ class ConnRecord(Minimal):
     """Connection record."""
 
     connection_id: str
-    invitation_key: str
     state: str
     rfc23_state: str
+    invitation_key: str | None = None
+    their_public_did: str | None = None
+    invitation_msg_id: str | None = None
 
 
-async def trustping(
-    sender: Controller, conn: ConnRecord, comment: Optional[str] = None
-):
+async def trustping(sender: Controller, conn: ConnRecord, comment: Optional[str] = None):
     """Send a trustping to the specified connection."""
     await sender.post(
         f"/connections/{conn.connection_id}/send-ping",
@@ -165,7 +165,7 @@ async def oob_invitation(
     invite_record = await inviter.post(
         "/out-of-band/create-invitation",
         json={
-            "handshake_protocols": ["https://didcomm.org/didexchange/1.0"],
+            "handshake_protocols": ["https://didcomm.org/didexchange/1.1"],
             "use_public_did": use_public_did,
         },
         params=params(
@@ -182,6 +182,7 @@ class OobRecord(Minimal):
     """Out-of-band record."""
 
     connection_id: str
+    state: str
     our_recipient_key: Optional[str] = None
 
 
@@ -191,6 +192,7 @@ async def didexchange(
     *,
     invite: Optional[InvitationMessage] = None,
     use_existing_connection: bool = False,
+    alias: Optional[str] = None,
 ):
     """Connect two agents using did exchange protocol."""
     if not invite:
@@ -201,13 +203,15 @@ async def didexchange(
         json=invite,
         params=params(
             use_existing_connection=use_existing_connection,
+            alias=alias,
         ),
         response=OobRecord,
     )
 
-    if use_existing_connection and invitee_oob_record == "reuse-accepted":
+    if use_existing_connection and invitee_oob_record.state == "reuse-accepted":
         inviter_oob_record = await inviter.event_with_values(
             topic="out_of_band",
+            state="done",
             invi_msg_id=invite.id,
             event_type=OobRecord,
         )
@@ -372,18 +376,74 @@ async def indy_anoncred_onboard(agent: Controller):
     return public_did
 
 
+# Schema
 @dataclass
 class SchemaResult(Minimal):
-    """Result of creating a schema."""
+    """Result of creating a schema using /schemas."""
 
     schema_id: str
 
 
 @dataclass
+class SchemaStateAnoncreds(Minimal):
+    """schema_state field in SchemaResultAnoncreds."""
+
+    state: str
+    schema_id: str
+    schema: dict
+
+
+@dataclass
+class SchemaResultAnoncreds(Minimal):
+    """Result of creating a schema using /anoncreds/schema."""
+
+    schema_state: SchemaStateAnoncreds
+    schema_metadata: dict
+    registration_metadata: dict
+    job_id: Optional[str] = None
+
+    @classmethod
+    def deserialize(cls: Type[MinType], value: Mapping[str, Any]) -> MinType:
+        """Deserialize the cred def result record."""
+        value = dict(value)
+        value["schema_state"] = SchemaStateAnoncreds.deserialize(value["schema_state"])
+        return super().deserialize(value)
+
+
+# CredDefResult
+@dataclass
 class CredDefResult(Minimal):
     """Result of creating a credential definition."""
 
     credential_definition_id: str
+
+
+@dataclass
+class CredDefStateAnoncreds(Minimal):
+    """credential_definition_state field in CredDefResult."""
+
+    state: str
+    credential_definition_id: str
+    credential_definition: dict
+
+
+@dataclass
+class CredDefResultAnoncreds(Minimal):
+    """Result of creating a cred def using /anoncreds/credential-definition."""
+
+    credential_definition_state: CredDefStateAnoncreds
+    credential_definition_metadata: dict
+    registration_metadata: dict
+    job_id: Optional[str] = None
+
+    @classmethod
+    def deserialize(cls: Type[MinType], value: Mapping[str, Any]) -> MinType:
+        """Deserialize the cred def result record."""
+        value = dict(value)
+        value["credential_definition_state"] = CredDefStateAnoncreds.deserialize(
+            value["credential_definition_state"]
+        )
+        return super().deserialize(value)
 
 
 async def indy_anoncred_credential_artifacts(
@@ -394,8 +454,86 @@ async def indy_anoncred_credential_artifacts(
     cred_def_tag: Optional[str] = None,
     support_revocation: bool = False,
     revocation_registry_size: Optional[int] = None,
+    issuer_id: Optional[str] = None,
+    endorser_connection_id: Optional[str] = None,
 ):
     """Prepare credential artifacts for indy anoncreds."""
+    # Get wallet type
+    if agent.wallet_type is None:
+        raise ControllerError(
+            "Wallet type not found. Please correctly set up the controller."
+        )
+    anoncreds_wallet = agent.wallet_type == "askar-anoncreds"
+
+    # If using wallet=askar-anoncreds:
+    if anoncreds_wallet:
+        if issuer_id is None:
+            raise ControllerError(
+                "If using askar-anoncreds wallet, issuerID must be specified."
+            )
+
+        schema = (
+            await agent.post(
+                "/anoncreds/schema",
+                json={
+                    "schema": {
+                        "attrNames": attributes,
+                        "issuerId": issuer_id,
+                        "name": schema_name or "minimal-" + token_hex(8),
+                        "version": schema_version or "1.0",
+                    },
+                    "options": omit_none(endorser_connection_id=endorser_connection_id),
+                },
+                response=SchemaResultAnoncreds,
+            )
+        ).schema_state
+
+        if endorser_connection_id:
+            await agent.event_with_values(
+                "endorse_transaction", state="transaction_acked"
+            )
+
+        cred_def = (
+            await agent.post(
+                "/anoncreds/credential-definition",
+                json={
+                    "credential_definition": {
+                        "issuerId": issuer_id,
+                        "schemaId": schema.schema_id,
+                        "tag": cred_def_tag or token_hex(8),
+                    },
+                    "options": omit_none(
+                        endorser_connection_id=endorser_connection_id,
+                        revocation_registry_size=(
+                            revocation_registry_size if revocation_registry_size else 10
+                        ),
+                        support_revocation=support_revocation,
+                    ),
+                },
+                response=CredDefResultAnoncreds,
+            )
+        ).credential_definition_state
+
+        if endorser_connection_id:
+            # Cred Def
+            await agent.event_with_values(
+                "endorse_transaction", timeout=120, state="transaction_acked"
+            )
+            # Rev Reg Def x2
+            await agent.event_with_values(
+                "endorse_transaction", timeout=60, state="transaction_acked"
+            )
+            await agent.event_with_values(
+                "endorse_transaction", timeout=60, state="transaction_acked"
+            )
+            # Init list
+            await agent.event_with_values(
+                "endorse_transaction", timeout=60, state="transaction_acked"
+            )
+
+        return schema, cred_def
+
+    # If using wallet=askar
     schema = await agent.post(
         "/schemas",
         json={
@@ -547,11 +685,20 @@ class V20CredExRecordIndy(Minimal):
 
 
 @dataclass
+class V20CredExRecordAnonCreds(Minimal):
+    """V2.0 credential exchange record anoncreds."""
+
+    rev_reg_id: Optional[str] = None
+    cred_rev_id: Optional[str] = None
+
+
+@dataclass
 class V20CredExRecordDetail(Minimal):
     """V2.0 credential exchange record detail."""
 
     cred_ex_record: V20CredExRecord
     indy: Optional[V20CredExRecordIndy] = None
+    anoncreds: V20CredExRecordAnonCreds | None = None
 
 
 async def indy_issue_credential_v2(
@@ -659,6 +806,114 @@ async def indy_issue_credential_v2(
     )
 
 
+async def anoncreds_issue_credential_v2(
+    issuer: Controller,
+    holder: Controller,
+    issuer_connection_id: str,
+    holder_connection_id: str,
+    cred_def_id: str,
+    attributes: Mapping[str, str],
+) -> Tuple[V20CredExRecordDetail, V20CredExRecordDetail]:
+    """Issue an indy credential using issue-credential/2.0.
+
+    Issuer and holder should already be connected.
+    """
+
+    issuer_cred_ex = await issuer.post(
+        "/issue-credential-2.0/send-offer",
+        json={
+            "auto_issue": False,
+            "auto_remove": False,
+            "comment": "Credential from minimal example",
+            "trace": False,
+            "connection_id": issuer_connection_id,
+            "filter": {"anoncreds": {"cred_def_id": cred_def_id}},
+            "credential_preview": {
+                "type": "issue-credential-2.0/2.0/credential-preview",  # pyright: ignore
+                "attributes": [
+                    {
+                        "mime_type": None,
+                        "name": name,
+                        "value": value,
+                    }
+                    for name, value in attributes.items()
+                ],
+            },
+        },
+        response=V20CredExRecord,
+    )
+    issuer_cred_ex_id = issuer_cred_ex.cred_ex_id
+
+    holder_cred_ex = await holder.event_with_values(
+        topic="issue_credential_v2_0",
+        event_type=V20CredExRecord,
+        connection_id=holder_connection_id,
+        state="offer-received",
+    )
+    holder_cred_ex_id = holder_cred_ex.cred_ex_id
+
+    holder_cred_ex = await holder.post(
+        f"/issue-credential-2.0/records/{holder_cred_ex_id}/send-request",
+        response=V20CredExRecord,
+    )
+
+    await issuer.event_with_values(
+        topic="issue_credential_v2_0",
+        cred_ex_id=issuer_cred_ex_id,
+        state="request-received",
+    )
+
+    issuer_cred_ex = await issuer.post(
+        f"/issue-credential-2.0/records/{issuer_cred_ex_id}/issue",
+        json={},
+        response=V20CredExRecordDetail,
+    )
+
+    await holder.event_with_values(
+        topic="issue_credential_v2_0",
+        cred_ex_id=holder_cred_ex_id,
+        state="credential-received",
+    )
+
+    holder_cred_ex = await holder.post(
+        f"/issue-credential-2.0/records/{holder_cred_ex_id}/store",
+        json={},
+        response=V20CredExRecordDetail,
+    )
+    issuer_cred_ex = await issuer.event_with_values(
+        topic="issue_credential_v2_0",
+        event_type=V20CredExRecord,
+        cred_ex_id=issuer_cred_ex_id,
+        state="done",
+    )
+    issuer_anoncreds_record = await issuer.event_with_values(
+        topic="issue_credential_v2_0_anoncreds",
+        event_type=V20CredExRecordAnonCreds,
+    )
+
+    holder_cred_ex = await holder.event_with_values(
+        topic="issue_credential_v2_0",
+        event_type=V20CredExRecord,
+        cred_ex_id=holder_cred_ex_id,
+        state="done",
+    )
+    holder_anoncreds_record = await holder.event_with_values(
+        topic="issue_credential_v2_0_anoncreds",
+        event_type=V20CredExRecordAnonCreds,
+    )
+
+    return (
+        V20CredExRecordDetail(
+            cred_ex_record=issuer_cred_ex,
+            anoncreds=issuer_anoncreds_record,
+        ),
+        V20CredExRecordDetail(
+            cred_ex_record=holder_cred_ex,
+            anoncreds=holder_anoncreds_record,
+        ),
+    )
+
+
 @dataclass
 class IndyProofRequest(Minimal):
     """Indy proof request."""
@@ -700,7 +955,7 @@ class IndyCredPrecis(Minimal):
         return super().deserialize(value)
 
 
-def indy_auto_select_credentials_for_presentation_request(
+def anoncreds_auto_select_credentials_for_presentation_request(
     presentation_request: Union[IndyProofRequest, dict],
     relevant_creds: List[IndyCredPrecis],
 ) -> IndyPresSpec:
@@ -795,7 +1050,7 @@ async def indy_present_proof_v1(
         f"/present-proof/records/{holder_pres_ex_id}/credentials",
         response=List[IndyCredPrecis],
     )
-    pres_spec = indy_auto_select_credentials_for_presentation_request(
+    pres_spec = anoncreds_auto_select_credentials_for_presentation_request(
         holder_pres_ex.presentation_request, relevant_creds
     )
     holder_pres_ex = await holder.post(
@@ -914,7 +1169,7 @@ async def indy_present_proof_v2(
     )
     assert holder_pres_ex.by_format.pres_request
     indy_proof_request = holder_pres_ex.by_format.pres_request["indy"]
-    pres_spec = indy_auto_select_credentials_for_presentation_request(
+    pres_spec = anoncreds_auto_select_credentials_for_presentation_request(
         indy_proof_request, relevant_creds
     )
     holder_pres_ex = await holder.post(
@@ -954,7 +1209,102 @@ async def indy_present_proof_v2(
     return holder_pres_ex, verifier_pres_ex
 
 
-async def indy_anoncreds_revoke(
+async def anoncreds_present_proof_v2(
+    holder: Controller,
+    verifier: Controller,
+    holder_connection_id: str,
+    verifier_connection_id: str,
+    *,
+    name: Optional[str] = None,
+    version: Optional[str] = None,
+    comment: Optional[str] = None,
+    requested_attributes: Optional[List[Mapping[str, Any]]] = None,
+    requested_predicates: Optional[List[Mapping[str, Any]]] = None,
+    non_revoked: Optional[Mapping[str, int]] = None,
+):
+    """Present an Indy credential using present proof v2."""
+    verifier_pres_ex = await verifier.post(
+        "/present-proof-2.0/send-request",
+        json={
+            "auto_verify": False,
+            "comment": comment or "Presentation request from minimal",
+            "connection_id": verifier_connection_id,
+            "presentation_request": {
+                "anoncreds": {
+                    "name": name or "proof",
+                    "version": version or "0.1.0",
+                    "nonce": str(randbelow(10**10)),
+                    "requested_attributes": {
+                        str(uuid4()): attr for attr in requested_attributes or []
+                    },
+                    "requested_predicates": {
+                        str(uuid4()): pred for pred in requested_predicates or []
+                    },
+                    "non_revoked": (non_revoked if non_revoked else None),
+                },
+            },
+            "trace": False,
+        },
+        response=V20PresExRecord,
+    )
+    verifier_pres_ex_id = verifier_pres_ex.pres_ex_id
+
+    holder_pres_ex = await holder.event_with_values(
+        topic="present_proof_v2_0",
+        event_type=V20PresExRecord,
+        connection_id=holder_connection_id,
+        state="request-received",
+    )
+    assert holder_pres_ex.pres_request
+    holder_pres_ex_id = holder_pres_ex.pres_ex_id
+
+    relevant_creds = await holder.get(
+        f"/present-proof-2.0/records/{holder_pres_ex_id}/credentials",
+        response=List[IndyCredPrecis],
+    )
+    assert holder_pres_ex.by_format.pres_request
+    anoncreds_proof_request = holder_pres_ex.by_format.pres_request["anoncreds"]
+    pres_spec = anoncreds_auto_select_credentials_for_presentation_request(
+        anoncreds_proof_request, relevant_creds
+    )
+    holder_pres_ex = await holder.post(
+        f"/present-proof-2.0/records/{holder_pres_ex_id}/send-presentation",
+        json={
+            "anoncreds": pres_spec.serialize(),
+            "trace": False,
+        },
+        response=V20PresExRecord,
+    )
+
+    await verifier.event_with_values(
+        topic="present_proof_v2_0",
+        event_type=V20PresExRecord,
+        pres_ex_id=verifier_pres_ex_id,
+        state="presentation-received",
+    )
+    verifier_pres_ex = await verifier.post(
+        f"/present-proof-2.0/records/{verifier_pres_ex_id}/verify-presentation",
+        json={},
+        response=V20PresExRecord,
+    )
+    verifier_pres_ex = await verifier.event_with_values(
+        topic="present_proof_v2_0",
+        event_type=V20PresExRecord,
+        pres_ex_id=verifier_pres_ex_id,
+        state="done",
+    )
+
+    holder_pres_ex = await holder.event_with_values(
+        topic="present_proof_v2_0",
+        event_type=V20PresExRecord,
+        pres_ex_id=holder_pres_ex_id,
+        state="done",
+    )
+
+    return holder_pres_ex, verifier_pres_ex
+
+
+async def anoncreds_revoke(
     issuer: Controller,
     cred_ex: Union[V10CredentialExchange, V20CredExRecordDetail],
     holder_connection_id: Optional[str] = None,
@@ -967,6 +1317,13 @@ async def indy_anoncreds_revoke(
     V1.0: V10CredentialExchange
     V2.0: V20CredExRecordDetail.
     """
+    # Get wallet type
+    if issuer.wallet_type is None:
+        raise ControllerError(
+            "Wallet type not found. Please correctly set up the controller."
+        )
+    anoncreds_wallet = issuer.wallet_type == "askar-anoncreds"
+
     if notify and holder_connection_id is None:
         return (
             "If you are going to set notify to True,"
@@ -976,7 +1333,7 @@ async def indy_anoncreds_revoke(
     # Passes in V10CredentialExchange
     if isinstance(cred_ex, V10CredentialExchange):
         await issuer.post(
-            url="/revocation/revoke",
+            url="{}/revocation/revoke".format("/anoncreds" if anoncreds_wallet else ""),
             json={
                 "connection_id": holder_connection_id,
                 "rev_reg_id": cred_ex.revoc_reg_id,
@@ -988,13 +1345,20 @@ async def indy_anoncreds_revoke(
         )
 
     # Passes in V20CredExRecordDetail
-    elif isinstance(cred_ex, V20CredExRecordDetail) and cred_ex.indy:
+    elif isinstance(cred_ex, V20CredExRecordDetail):
+        if cred_ex.indy:
+            format = cred_ex.indy
+        elif cred_ex.anoncreds:
+            format = cred_ex.anoncreds
+        else:
+            raise ValueError("Missing indy or anoncreds on detail")
+
         await issuer.post(
-            url="/revocation/revoke",
+            url="{}/revocation/revoke".format("/anoncreds" if anoncreds_wallet else ""),
             json={
                 "connection_id": holder_connection_id,
-                "rev_reg_id": cred_ex.indy.rev_reg_id,
-                "cred_rev_id": cred_ex.indy.cred_rev_id,
+                "rev_reg_id": format.rev_reg_id,
+                "cred_rev_id": format.cred_rev_id,
                 "publish": publish,
                 "notify": notify,
                 "notify_version": notify_version,
@@ -1008,7 +1372,7 @@ async def indy_anoncreds_revoke(
         )
 
 
-async def indy_anoncreds_publish_revocation(
+async def anoncreds_publish_revocation(
     issuer: Controller,
     cred_ex: Union[V10CredentialExchange, V20CredExRecordDetail],
     publish: bool = False,
@@ -1019,9 +1383,18 @@ async def indy_anoncreds_publish_revocation(
     V1.0: V10CredentialExchange
     V2.0: V20CredExRecordDetail.
     """
+    # Get wallet type
+    if issuer.wallet_type is None:
+        raise ControllerError(
+            "Wallet type not found. Please correctly set up the controller."
+        )
+    anoncreds_wallet = issuer.wallet_type == "askar-anoncreds"
+
     if isinstance(cred_ex, V10CredentialExchange):
         await issuer.post(
-            url="/revocation/publish-revocations",
+            url="{}/revocation/publish-revocations".format(
+                "/anoncreds" if anoncreds_wallet else ""
+            ),
             json={
                 "rev_reg_id": cred_ex.revoc_reg_id,
                 "cred_rev_id": cred_ex.revocation_id,
@@ -1030,12 +1403,21 @@ async def indy_anoncreds_publish_revocation(
             },
         )
 
-    elif isinstance(cred_ex, V20CredExRecordDetail) and cred_ex.indy:
+    elif isinstance(cred_ex, V20CredExRecordDetail):
+        if cred_ex.indy:
+            format = cred_ex.indy
+        elif cred_ex.anoncreds:
+            format = cred_ex.anoncreds
+        else:
+            raise ValueError("Missing indy or anoncreds on detail")
+
         await issuer.post(
-            url="/revocation/publish-revocations",
+            url="{}/revocation/publish-revocations".format(
+                "/anoncreds" if anoncreds_wallet else ""
+            ),
             json={
-                "rev_reg_id": cred_ex.indy.rev_reg_id,
-                "cred_rev_id": cred_ex.indy.cred_rev_id,
+                "rev_reg_id": format.rev_reg_id,
+                "cred_rev_id": format.cred_rev_id,
                 "publish": publish,
                 "notify": notify,
             },
