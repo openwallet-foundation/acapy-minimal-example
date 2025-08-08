@@ -1,35 +1,42 @@
-# acapy-minimal-example
+# ACA-Py Minimal Example (AME)
 
-Create a minimal reproducible example of behaviour in ACA-Py. Easily spin-up two or more ACA-Py instances and use the controller interface, as well as a number of pre-set protocols, to interact with them and have them interact with each other.
+The ACA‑Py Minimal Example (AME) is a streamlined, containerized toolkit for developers and integration engineers working with the the [OpenWallet Foundation](https://openwallet.foundation)'s ACA‑Py digital trust agent. It’s ideal for those who want to quickly reproduce bugs, test features, or experiment with protocols without navigating complex infrastructure setup. By providing pre-configured Docker environments, a simple “hackable” controller API, and ready‑to‑run protocol scenarios (like issuing credentials or establishing DID‑based connections), AME accelerates feedback loops, makes debugging more efficient, and simplifies collaboration. Whether you’re testing edge‑case behaviors, executing integration tests, or demonstrating functionality, this minimal setup keeps focus on core interactions with ACA‑Py—rather than managing deployment overhead.
+
+- **Who it’s for**: Developers and integration engineers working with ACA‑Py.
+- **Why it’s useful**: Simplifies and accelerates testing, debugging, and experimentation.
+- **Key benefits**:
+  - Fully containerized setup—no manual environment configuration.
+  - A flexible, lightweight controller to drive Admin API and event flows.
+  - Prebuilt examples covering common use cases (e.g., DID exchange, credential issuance, proof presentation) to get started immediately.
 
 ## Quick Start
 
-If you'd like to create a minimal reproducible example, simply fork this repo, and copy an existing one in the `examples` directory or the template found in `examples/template`.
+If you'd like to create a minimal reproducible example, simply fork this repo, and copy the most relevant one in the `examples` directory or use the template found in `examples/template`.
 
-Each example is a script that describes a simple interaction between two ACA-Py agents with the goal of testing a feature. It is recommended that examples be as minimal and as self-contained as possible.
+Each example is a script that implements a simple interaction between two (or more) ACA-Py agents with the goal of testing a feature. It is recommended that examples contributed to this repository be as self-contained as possible.
 
-## Goals for this Project
+## AME Goals
 
-- Minimal Setup (everything runs in containers)
-- Quickly reproduce an issue or demonstrate a feature by writing one simple
-  script or pytest tests.
+- Minimal setup (everything runs in containers)
+- Ideal for quickly reproducing an issue or demonstrating a feature by writing simple
+  scripts or pytest tests.
 - Generator for common agent setups (`Dockerfile`s + `docker-compose.yml`). For example:
-    - Alice, Bob
-    - Alice, Bob, Mediator
-    - Issuer, Holder, Verifier
-    - Endorser, Issuer, Holder, Verifier
-    - ACA-Py, Echo (Remote controlled static agent; for sending raw messages)
-    - Any combination of the above with a specified set of plugins installed.
-    - Any combination of the above with tails server and/or tunnel
-    - etc.
+  - Alice, Bob
+  - Alice, Bob, Mediator
+  - Issuer, Holder, Verifier
+  - Endorser, Issuer, Holder, Verifier
+  - ACA-Py, Echo (Remote controlled static agent; for sending raw messages)
+  - Any combination of the above with a specified set of plugins installed.
+  - Any combination of the above with tails server and/or tunnel
+  - etc.
 
 We're still working on achieving these goals, particularly the generator.
 
-Contributions are welcome. In particular, please feel free to contribute any examples you create. These should follow the format found in `template`: a docker-compose, an `example.py` script containing the example, and a `README.md` describing the example (as well as any additional scripts/Dockerfiles/etc. needed).
+Contributions are welcome. In particular, please feel free to contribute any examples you create that might help others. These should follow the format found in the `template` example: a docker-compose file, an `example.py` script containing the use-case specific details, and a `README.md` describing the example (as well as any additional scripts/Dockerfiles/etc. needed).
 
 ## Controller
 
-Included in this repo is a simple "hackable" controller. The controller provides
+Included in this repo is a simple "hackable" ACA-Py controller. The controller provides
 an interface for interacting with an ACA-Py instance. The primary operations
 are:
 
@@ -38,17 +45,18 @@ are:
   events emitted by the agent
 
 The controller is inspired by a number of similar efforts, including the
-auto-generated client libraries
-[acapy-client](https://github.com/Indicio-tech/acapy-client) and
-[aries-cloudcontroller](https://github.com/didx-xyz/aries-cloudcontroller-python), the
-[acapy-revocation-demo](https://github.com/Indicio-tech/acapy-revocation-demo/)
+auto-generated client libraries [acapy-client] and [aries-cloudcontroller], the [acapy-revocation-demo]
 (which is often used internally at Indicio exactly the way we intend this repo
-to be used), and the [integration test controllers in ACA-Py's BDD
-tests](https://github.com/hyperledger/aries-cloudagent-python/tree/main/demo/runners).
+to be used), and the [integration test controllers in ACA-Py's BDD tests].
 
-This controller differs from these in a few key ways:
+[acapy-client]: https://github.com/Indicio-tech/acapy-client
+[aries-cloudcontroller]: https://github.com/didx-xyz/aries-cloudcontroller-python
+[acapy-revocation-demo]: https://github.com/Indicio-tech/acapy-revocation-demo/
+[integration test controllers in ACA-Py's BDD tests]: https://github.com/openwallet-foundation/acapy/tree/main/demo/runners
 
-- This controller is intended to be as simple and hackable as possible. Specific
+The AME controller differs from these in a few key ways:
+
+- The AME controller is intended to be as simple and hackable as possible. Specific
   operations like creating an out-of-band connection or issuing a credential are
   not implemented directly on the controller. Instead, the building blocks for
   these operations are made available so the library consumer can tweak
@@ -57,7 +65,7 @@ This controller differs from these in a few key ways:
   implement a new request method or generate a new client.
 - Models for request bodies are included but optional. This helps strike a
   balance between flexibility and ease of use that isn't achieved in an
-  interface like the one provided by the acapy-revocation-demo controller, for
+  interface like the one provided by the [acapy-revocation-demo] controller, for
   instance. In addition to the included models, a dictionary,
   dataclass (from python's standard `dataclasses`), or a class/instance
   implementing a `serialize` and `deserialize` method can be used as the request
@@ -71,10 +79,11 @@ This controller differs from these in a few key ways:
 - This controller provides a system for capturing webhooks/events that is well
   suited for a testing or demonstration scenario.
 
-
 ## Protocols
 
-Several helper methods are included in [protocols.py](./acapy_controller/protocols) that are useful for causing two ACA-Py instances to engage in a protocol. The `Controller` instances connected to the ACA-Py instances are used to orchestrate each of the Admin API calls required and await the expected webhooks to see the given protocol through to completion.
+Several helper methods are included in the [protocols.py] script that are useful for causing two ACA-Py instances to engage in a protocol. The `Controller` instances connected to the ACA-Py instances are used to orchestrate each of the Admin API calls required and await the expected webhooks to see the given protocol through to completion.
+
+[protocols.py]: https://github.com/openwallet-foundation/acapy-minimal-example/tree/main/acapy_controller/protocols.py
 
 Some of the implemented protocols include:
 
@@ -90,7 +99,6 @@ In addition to protocol helpers, some other common admin operations have some au
 > [!WARNING]
 > By using this tool, you are expressing your acceptance of the Transaction Author Agreement of the network to which you are connecting.
 - Indy AnonCred credential artifact creation (`indy_anoncred_credential_artifacts`) - Creates a schema and credential definition for that schema. Supports setting revocation on the resulting cred def.
-
 
 ## Models
 
@@ -132,11 +140,11 @@ Because of the need to work with various ACA-Py versions, released and unrelease
 
 The Controller can be used as a simple HTTP client to make Admin API requests to ACA-Py. For more interesting exchanges, though, ACA-Py depends on reporting events asynchronously to its controller, usually via posted webhooks. ACA-Py also supports delivering these events to connected WebSockets. Using a WebSocket and an ["Asynchronous Selective Queue"](https://github.com/dbluhm/async-selective-queue), the Controller also exposes a versatile interface for expecting and handling these webhook events.
 
-See the example above under "Models" or [protocols.py](./acapy_controller/protocols.py) for how this can be used.
+See the example above under "Models" or [protocols.py] for how this can be used.
 
 ## Examples
 
-A number of examples can be found in the [examples](./examples) directory. Each
+A number of examples can be found in the AME repository's [examples] directory. Each
 of these contains a `docker-compose.yml` and a `example.py`. You can run each
 example by `cd`ing into the directory and running:
 
@@ -147,25 +155,37 @@ docker-compose run example
 docker-compose down -v
 ```
 
+[examples]: examples/README.md
+
 ## Instructions on Running Tests
 
 There are some automated tests used to validate the builtin protocol helpers.
 
 To run the tests:
 
-```
+```sh
 docker-compose run tests
 ```
 
 This should build everything as needed. If not:
 
-```
+```sh
 docker-compose build
 ```
 
 To stop and remove all running containers:
 
+```sh
+docker-compose down
 ```
+
+```sh
+docker-compose build
+```
+
+To stop and remove all running containers:
+
+```sh
 docker-compose down
 ```
 
@@ -175,10 +195,10 @@ docker-compose down
 
 ## Testing the Examples
 
-Pytest has been configured to run checks on the [examples](./examples). You can
+Pytest has been configured to run checks on the [examples]. You can
 run these with:
 
-```
+```sh
 poetry run pytest -m examples
 ```
 
@@ -199,11 +219,10 @@ One can also build the docker images from a local ACA-Py repo contents, if so de
 
 From the root of the ACA-Py repo, do:
 
-```
+```sh
 docker build -t acapy-test -f docker/Dockerfile.run .
 ```
 
 Then remove the build mapping from the ACA-Py services (back in [the
-acapy-minimal-example](https://github.com/Indicio-tech/acapy-minimal-example)
+acapy-minimal-example](https://github.com/openwallet-foundation/acapy-minimal-example)
 repo) and replace it with `image: acapy-test`
-
