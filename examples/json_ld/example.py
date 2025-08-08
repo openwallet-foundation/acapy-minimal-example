@@ -25,7 +25,7 @@ BOB = getenv("BOB", "http://bob:3001")
 
 def presentation_summary(pres_ex: V20PresExRecord):
     """Summarize a presentation."""
-    pres_ex_dict = pres_ex.dict(exclude_none=True, exclude_unset=True)
+    pres_ex_dict = pres_ex.model_dump(exclude_none=True, exclude_unset=True)
     return json.dumps(
         {
             key: pres_ex_dict.get(key)
