@@ -1,10 +1,12 @@
 # acapy-minimal-example
 
-Create a minimal reproducible example.
+Create a minimal reproducible example of behaviour in ACA-Py. Easily spin-up two or more ACA-Py instances and use the controller interface, as well as a number of pre-set protocols, to interact with them and have them interact with each other.
 
 ## Quick Start
 
-If you'd like to create a minimal reproducible example, consider starting from the template repository: [acapy-minimal-example-template](https://github.com/Indicio-tech/acapy-minimal-example-template)
+If you'd like to create a minimal reproducible example, simply fork this repo, and copy an existing one in the `examples` directory or the template found in `examples/template`.
+
+Each example is a script that describes a simple interaction between two ACA-Py agents with the goal of testing a feature. It is recommended that examples be as minimal and as self-contained as possible.
 
 ## Goals for this Project
 
@@ -23,7 +25,7 @@ If you'd like to create a minimal reproducible example, consider starting from t
 
 We're still working on achieving these goals, particularly the generator.
 
-Contributions are welcome.
+Contributions are welcome. In particular, please feel free to contribute any examples you create. These should follow the format found in `template`: a docker-compose, an `example.py` script containing the example, and a `README.md` describing the example (as well as any additional scripts/Dockerfiles/etc. needed).
 
 ## Controller
 
