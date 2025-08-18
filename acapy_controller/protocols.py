@@ -241,9 +241,6 @@ async def didexchange(
         rfc23_state="request-received",
         invitation_key=inviter_oob_record.our_recipient_key,
     )
-    # TODO Remove after ACA-Py 0.12.0
-    # There's a bug with race conditions in the OOB multiuse handling
-    await asyncio.sleep(1)
     inviter_conn = await inviter.post(
         f"/didexchange/{inviter_conn.connection_id}/accept-request",
         response=ConnRecord,
