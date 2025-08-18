@@ -6,7 +6,7 @@ import json
 import logging
 from typing import TYPE_CHECKING, Any, AsyncIterator, Mapping, Optional
 
-from aiohttp import ClientSession, WSMsgType
+from aiohttp import ClientSession, WSMsgType, ClientWSTimeout
 from async_selective_queue import AsyncSelectiveQueue as Queue
 from dataclasses import dataclass
 
@@ -69,7 +69,7 @@ async def ws(controller: "Controller", queue: Queue[Event]):
     """WS Task."""
     LOGGER.info("Opening WS to %s/ws", controller.base_url)
     async with ClientSession(controller.base_url) as session:
-        async with session.ws_connect("/ws", timeout=30.0) as ws:
+        async with session.ws_connect("/ws", timeout=ClientWSTimeout(ws_close=30.0)) as ws:
             try:
                 async for msg in ws:
                     if msg.type == WSMsgType.TEXT:
